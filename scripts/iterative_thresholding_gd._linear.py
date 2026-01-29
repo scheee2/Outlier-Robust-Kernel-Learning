@@ -1,8 +1,6 @@
 """
 iterative_thresholding_gl_linear.py
 
-
-
 Author: Eric Scheer
 """
 
@@ -187,7 +185,7 @@ def main():
 
     n_train = 200
     d = 50
-    epsilon = 0.01
+    epsilon = 0.1
     sigma = 0.1
 
     X_clean = np.random.randn(n_train, d)
@@ -207,6 +205,7 @@ def main():
     y_corrupted[outlier_idx] += 3 * np.random.randn(num_outliers)
 
     # Covariance matrix (from clean data)
+    # TODO: use identity
     Sigma = np.cov(X_clean, rowvar=False)
 
     # Hyperparameters
