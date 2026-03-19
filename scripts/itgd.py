@@ -40,11 +40,11 @@ def iterative_threshold_gd_linear(X, y, Sigma, epsilon, eta, w, T=1000, tol=10e-
 
     n = y.shape[0]
 
-    # Data whitening
-    # TODO: Add back covariate filtering
-    X = X @ scipy.linalg.fractional_matrix_power(Sigma, -0.5)
-    #omega = covariate_filtering(X, epsilon)
-    omega = np.ones(n)
+    # Data whitening & Covariate Filtering
+    whitening_matrix = scipy.linalg.fractional_matrix_power(Sigma, -0.5)
+    X = X @ whitening_matrix
+
+    omega = covariate_filtering(X, epsilon)
 
     for _ in range(T):
         r = np.square(X @ w - y)
@@ -58,7 +58,7 @@ def iterative_threshold_gd_linear(X, y, Sigma, epsilon, eta, w, T=1000, tol=10e-
         omega_thresh = omega[thresh_idx]
 
         # Gradient Descent Update
-        grad = X_thresh.T @ (omega_thresh * (X_thresh @ w - y_thresh)) / k
+        grad = X_thresh.T @ (omega_thresh * (X_thresh @ w - y_thresh))
         w_new = w - eta * grad
 
         w = w_new
@@ -67,7 +67,8 @@ def iterative_threshold_gd_linear(X, y, Sigma, epsilon, eta, w, T=1000, tol=10e-
         if np.linalg.norm(grad) < tol:
             break
 
-    return w
+    # Unwhiten weights before return
+    return whitening_matrix @ w
 
 def iterative_threshold_gd_kernel(X, y, Sigma, epsilon, eta, alpha, T=1000, tol=1e-8):
     """
@@ -102,11 +103,10 @@ def iterative_threshold_gd_kernel(X, y, Sigma, epsilon, eta, alpha, T=1000, tol=
     n = y.shape[0]
 
     # Data whitening
-    # TODO: Add back covariate filtering
     X = X @ scipy.linalg.fractional_matrix_power(Sigma, -0.5)
     K = X @ X.T
-    #omega = covariate_filtering(X, epsilon)
-    omega = np.ones(n)
+    omega = covariate_filtering(X, epsilon)
+    print(np.linalg.norm(K, ord=2))
 
     for _ in range(T):
         r = np.square(K @ alpha - y)
@@ -120,7 +120,7 @@ def iterative_threshold_gd_kernel(X, y, Sigma, epsilon, eta, alpha, T=1000, tol=
         omega_thresh = omega[thresh_idx]
 
         # Gradient Descent Update
-        grad = K_thresh.T @ (omega_thresh * (K_thresh @ alpha - y_thresh)) / k
+        grad = K_thresh.T @ (omega_thresh * (K_thresh @ alpha - y_thresh))
         alpha_new = alpha - eta * grad
 
         alpha = alpha_new

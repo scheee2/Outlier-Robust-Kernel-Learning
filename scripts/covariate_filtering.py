@@ -16,12 +16,15 @@ def weighted_mean(X, w):
     
     Parameters
     ----------
-    X : n x d data matrix in row form
-    w : weight vector of length d where 0 <= w_i <= 1 for each weight
+    X : n x d ndarray
+        data matrix in row form
+    w : n ndarray
+        weight vector of length n where 0 <= w_i <= 1 for each weight
 
     Returns
     -------
-    weighted_mean:
+    weighted_mean: n ndarray
+        weighted mean of the rows of X
     """
 
     return (X.T @ w) / np.sum(w)
@@ -32,8 +35,15 @@ def weighted_covariance(X, w):
     
     Parameters
     ----------
-    X : Description
-    w : Description
+    X : n x d ndarray
+        data matrix in row form
+    w : n ndarray
+        weight vector of length n where 0 <= w_i <= 1 for each weight
+    
+    Returns
+    -------
+    weighted_cov: d x d ndarray
+        weighted covariance matrix 
     """
 
     mu = weighted_mean(X, w)
@@ -47,15 +57,18 @@ def mmw_update(d, feedback, alpha):
     
     Parameters
     ----------
-    d : number of data features
-    feedback : List of d x d feedback matrices
-    alpha : mmw parameter
+    d : int
+        number of data features
+    feedback : list[d x d ndarray]
+        List of d x d feedback matrices
+    alpha : float
+        mmw parameter
     """
 
     # Scaled sum of feedback matrices
     F_sum = alpha * np.sum(feedback, axis=0)
     if len(feedback) == 0:
-        F_sum = alpha * np.eye(d)
+        return np.eye(d) / d
 
     U = scipy.linalg.expm(F_sum)
     return U / np.linalg.trace(U)
@@ -66,39 +79,50 @@ def filter_1d(w, tau, b):
 
     Parameters
     ----------
-    w : Weight vector of length m
-    tau : Nonnegative vector QUE scores tau_1... tau_m
-    b : Multiplicative threshold parameter.
+    w : m ndarray
+        Weight vector of length m
+    tau : m ndarray
+        Nonnegative vector QUE scores tau_1... tau_m
+    b : float
+        Multiplicative threshold parameter.
     """
     
     tau_max = np.max(tau)
     sigma = np.sum(w * tau)
-    t_max = max(int(tau_max // (np.exp(b * sigma))), 1)
+    t_max = max(int(tau_max / (np.e * b * sigma)), 1)
 
     # Create vector of F_t values
     geometric_scalars = (1 - (tau / tau_max))
 
-    F = np.zeros(t_max)
+    # TODO: Change to binary search
+    F_t = 0
     w_t = w.copy()
     for t in range(t_max):
-        F[t] = np.sum(w_t * tau)
+        F_t = np.sum(w_t * tau)
+
+        if F_t <= b * sigma:
+            break
+
         w_t *= geometric_scalars
 
-    # Find smallest t such that F_t <= b * sigma
-    t = np.searchsorted(-F, -b * sigma)
-    t = min(t, t_max - 1) # index clamping
+    return w_t
 
-    return geometric_scalars**t * w
-
-def covariate_filtering(X, epsilon, C=5, max_epochs=100):
+def covariate_filtering(X, epsilon, C=500, max_epochs=100):
     """
     Implementation of algorithm 4 described in https://arxiv.org/pdf/1906.11366
     
     Parameters
     ----------
-    X : n x d data matrix with (1 - epsilon) * n points sampled from a subgaussian distribution.
-    epsilon : Description
-    C : Sufficiently large universal constant
+    X : n x d ndarray
+        data matrix with (1 - epsilon) * n points sampled from a subgaussian distribution.
+    epsilon : float
+        Corruption fraction 0 < epsilon < 0.5
+    C : float
+        Sufficiently large universal constant
+    
+    Returns
+    -------
+    omega : n ndarray
     """
 
     n, d = X.shape
@@ -133,14 +157,15 @@ def covariate_filtering(X, epsilon, C=5, max_epochs=100):
             # TODO: implement linear approximate score computations from Algorithm 5 of https://arxiv.org/pdf/1906.11366
 
             # q_t =〈cov_t - eye(d), U_t〉
-            q_t = np.linalg.trace((cov_t - np.eye(d)).T @ U_t)
+            # frobenius inner product
+            q_t = np.einsum('ij,ij->', cov_t - np.eye(d), U_t)
 
             if q_t > lmbda / 5:
+
                 # For i = 0 ... n, tau_t,i = (x_i - mu_t)^T U_t (x_i - mu_t)
-                # Use einsum to calculate quadratic forms
                 mu_t = weighted_mean(X, w)
                 X_centered_t = X - mu_t
-                tau_t = np.einsum('ij,ik,jk->i', X_centered_t, X_centered_t, U_t) 
+                tau_t = np.einsum('ij,jk,ik->i', X_centered_t, U_t, X_centered_t)
 
                 # sort tau scores in descending order and pick the first m sorted weights such that
                 # sum(w_i + ... + w_m) >= 2 * epsilon
@@ -150,6 +175,6 @@ def covariate_filtering(X, epsilon, C=5, max_epochs=100):
                 update_idx = desc_idx[:m]
                 w[update_idx] = filter_1d(w[update_idx], tau_t[update_idx], 0.25)
 
-            feedback.append(weighted_covariance(X, w))
+            feedback.append(weighted_covariance(X, w) - np.eye(d))
 
     return w
