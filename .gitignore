@@ -1,0 +1,28 @@
+# Byte-compiled files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+
+# Distribution / build files
+.Python
+build/
+dist/
+develop-eggs/
+*.egg-info/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
