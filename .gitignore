@@ -26,3 +26,6 @@ ENV/
 .idea/
 .vscode/
 *.swp
+
+.DS_Store
+**/.DS_Store
