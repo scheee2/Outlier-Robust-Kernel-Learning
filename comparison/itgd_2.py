@@ -3,10 +3,13 @@ itgd.py — Iterative Thresholding Gradient Descent for robust regression.
 
 Implements:
   - Linear ITGD  (primal space, Algorithm 1 from Rathnashyam & Gittens)
-  - Kernel ITGD  (dual space, kernelized extension from eric)
+  - Kernel ITGD  (dual space, kernelized extension from Scheer)
+  - Huber KRR    (baseline: kernel ridge regression with Huber loss)
 
-Both use covariate filtering (Dong et al. 2019) as a preprocessing step
-and hard-thresholding per iteration to discard high-residual points.
+ITGD uses covariate filtering (Dong et al. 2019) and per-iteration
+hard-thresholding. Huber KRR drops both and instead gets its robustness
+from the bounded-influence Huber loss — a natural baseline to isolate
+the contribution of filtering + thresholding.
 """
 
 import numpy as np
@@ -32,6 +35,20 @@ _ACTIVATIONS = {
     "identity":   (_identity, _identity_deriv),
     "leaky_relu": (_leaky_relu, _leaky_relu_deriv),
 }
+
+
+# ── Huber loss ──────────────────────────────────────────────────────────────
+
+def _huber_value(r, delta=1.0):
+    """Huber loss value  L_δ(r) = ½ r²  if |r|≤δ   else  δ(|r| − δ/2)."""
+    abs_r = np.abs(r)
+    return np.where(abs_r <= delta,
+                    0.5 * r ** 2,
+                    delta * (abs_r - 0.5 * delta))
+
+def _huber_deriv(r, delta=1.0):
+    """Derivative of Huber loss:  r  if |r|≤δ   else  δ·sign(r)."""
+    return np.where(np.abs(r) <= delta, r, delta * np.sign(r))
 
 def get_activation(name):
     """Return (f, f') pair for a named activation."""
@@ -90,8 +107,6 @@ def itgd_linear(X_train, y_train, Sigma, epsilon, eta=0.1, T=500,
     # Whiten covariates and run covariate filtering
     W = la.fractional_matrix_power(Sigma, -0.5).real
     Xw = X_train @ W
-
-    # NOTE- DIFFERENCE: Eric doesn't scale for omega*n
     omega = np.asarray(covariate_filtering(Xw, epsilon)).ravel() * n  # scale to ~1
 
     w = np.zeros(d)
@@ -105,9 +120,6 @@ def itgd_linear(X_train, y_train, Sigma, epsilon, eta=0.1, T=500,
 
         z_S = Xw[S] @ w
         resid_S = f(z_S) - y_train[S]
-
-        # NOTE- DIFFERENCE: Eric doenst divide by K here
-        # Also eric eoesnt multiply by f_prime, assuming it to be the identity
         grad = Xw[S].T @ (omega[S] * resid_S * fp(z_S)) / k
 
         gn = float(np.linalg.norm(grad))
@@ -177,8 +189,6 @@ def itgd_kernel(X_train, y_train, Sigma, epsilon, eta=0.01,
     # Build & normalise kernel matrix
     K_raw = kfn(Xw, Xw)
     K_diag = np.sqrt(np.diag(K_raw) + 1e-10)
-    # NOTE- DIFFERENCE: eric doesnt normalize here
-    # should just affect numerical stability
     K = K_raw / np.outer(K_diag, K_diag) + 1e-6 * np.eye(n)
 
     alpha = np.zeros(n)
@@ -193,9 +203,6 @@ def itgd_kernel(X_train, y_train, Sigma, epsilon, eta=0.01,
 
         z_S = K[S] @ alpha
         resid_S = f(z_S) - y_train[S]
-        # NOTE- DIFFERENCE:
-        # same as linear: eric doesnt divide by k or have fp (assumes identity)
-        # i also added the regularization  (lambda * K@alpha)
         grad = K[S].T @ (omega[S] * resid_S * fp(z_S)) / k + lam * Ka
 
         gn = float(np.linalg.norm(grad))
@@ -206,6 +213,93 @@ def itgd_kernel(X_train, y_train, Sigma, epsilon, eta=0.01,
         hist["grad_norm"].append(gn)
         hist["mse_full"].append(float(np.mean(r)))
         hist["mse_kept"].append(float(np.mean(r[S])))
+
+        alpha -= eta * grad
+        if gn < tol:
+            break
+
+    return alpha, Xw, hist
+
+
+# ── Huber Kernel Ridge Regression (baseline) ────────────────────────────────
+
+def huber_krr(X_train, y_train, Sigma, kernel="linear", lam=1e-3,
+              delta=1.0, eta=0.01, T=500, activation="identity",
+              tol=1e-8, **kernel_kw):
+    """
+    Kernel Ridge Regression with Huber loss — a robust baseline that keeps
+    RKHS regularisation but replaces the squared loss with Huber.
+
+    Objective:
+        J(α) = (1/n) Σ L_δ(f(K_i α) − y_i)  +  (λ/2) α^T K α
+        L_δ(r) = ½ r²          if |r| ≤ δ
+                 δ(|r| − δ/2)  otherwise
+
+    Unlike ITGD, there is NO covariate filtering and NO iterative
+    thresholding — robustness comes entirely from the bounded-influence
+    Huber loss.  This isolates the contribution of filtering + thresholding
+    when compared head-to-head against itgd_kernel.
+
+    Parameters
+    ----------
+    X_train, y_train, Sigma  — as in itgd_kernel
+    kernel     : "linear" | "rbf" | "poly"  — or a callable(X1, X2)
+    lam        : RKHS regularisation strength
+    delta      : Huber transition point — smaller ⇒ more robust, more biased
+    eta, T, activation, tol, **kernel_kw  — as in itgd_kernel
+
+    Returns
+    -------
+    alpha    : (n,)   dual coefficients (compatible with predict_kernel)
+    Xw_train : (n, d) whitened training data
+    hist     : dict   keys: grad_norm, loss, mse_full
+    """
+    # Select kernel function
+    if callable(kernel):
+        kfn = kernel
+    elif kernel == "linear":
+        kfn = kernel_linear
+    elif kernel == "rbf":
+        kfn = lambda X1, X2: kernel_rbf(X1, X2, **kernel_kw)
+    elif kernel == "poly":
+        kfn = lambda X1, X2: kernel_poly(X1, X2, **kernel_kw)
+    else:
+        raise ValueError(f"Unknown kernel '{kernel}'")
+
+    n, d = X_train.shape
+    f, fp = get_activation(activation)
+
+    # Whiten (same preprocessing as itgd_kernel for apples-to-apples comparison)
+    W_half = la.fractional_matrix_power(Sigma, -0.5).real
+    Xw = X_train @ W_half
+
+    # Build & normalise kernel matrix
+    K_raw = kfn(Xw, Xw)
+    K_diag = np.sqrt(np.diag(K_raw) + 1e-10)
+    K = K_raw / np.outer(K_diag, K_diag) + 1e-6 * np.eye(n)
+
+    alpha = np.zeros(n)
+    hist = {"grad_norm": [], "loss": [], "mse_full": []}
+
+    for _ in range(T):
+        Ka = K @ alpha
+        pred = f(Ka)
+        resid = pred - y_train
+
+        # Huber gradient:  (1/n) K^T (L_δ'(resid) ⊙ f'(Kα))  +  λ K α
+        hd = _huber_deriv(resid, delta)
+        grad = K.T @ (hd * fp(Ka)) / n + lam * Ka
+
+        gn = float(np.linalg.norm(grad))
+        if gn > 1e6:                                  # gradient clipping
+            grad *= 1e6 / gn
+            gn = 1e6
+
+        loss = float(np.mean(_huber_value(resid, delta))
+                     + 0.5 * lam * alpha @ Ka)
+        hist["grad_norm"].append(gn)
+        hist["loss"].append(loss)
+        hist["mse_full"].append(float(np.mean(resid ** 2)))
 
         alpha -= eta * grad
         if gn < tol:
