@@ -40,7 +40,7 @@ _ACTIVATIONS = {
 # ── Huber loss ──────────────────────────────────────────────────────────────
 
 def _huber_value(r, delta=1.0):
-    """Huber loss value  L_δ(r) = ½ r²  if |r|≤δ   else  δ(|r| − δ/2)."""
+    """Huber loss value  L_δ(r) = ½ r²  if |r|≤δ   else  δ(|r| -δ/2)."""
     abs_r = np.abs(r)
     return np.where(abs_r <= delta,
                     0.5 * r ** 2,
@@ -83,7 +83,7 @@ def kernel_poly(X1, X2, degree=2, coef0=1.0, gamma=None):
 def itgd_linear(X_train, y_train, Sigma, epsilon, eta=0.1, T=500,
                 activation="identity", tol=1e-8):
     """
-    Primal-space ITGD with covariate filtering.
+    Primal-space ITGD with covariate filtering
 
     Parameters
     ----------
@@ -140,9 +140,9 @@ def itgd_kernel(X_train, y_train, Sigma, epsilon, eta=0.01,
                 kernel="linear", lam=1e-3, T=500,
                 activation="identity", tol=1e-8, **kernel_kw):
     """
-    Dual-space (kernel) ITGD with covariate filtering.
+    Dual-space (kernel) ITGD with covariate filtering
 
-    Optimises  alpha  in the objective (Scheer, Sec. 5):
+    Optimises  alpha  in the objective:
         J(alpha) = (1/n) sum l(f(K_i alpha), y_i)  +  (lam/2) alpha^T K alpha
 
     Parameters
@@ -227,25 +227,27 @@ def huber_krr(X_train, y_train, Sigma, kernel="linear", lam=1e-3,
               delta=1.0, eta=0.01, T=500, activation="identity",
               tol=1e-8, **kernel_kw):
     """
-    Kernel Ridge Regression with Huber loss — a robust baseline that keeps
-    RKHS regularisation but replaces the squared loss with Huber.
+    Kernel Ridge Regression with Huber loss — keeps
+    RKHS regularisation but replaces the squared loss with Huber
 
     Objective:
-        J(α) = (1/n) Σ L_δ(f(K_i α) − y_i)  +  (λ/2) α^T K α
+        J(alpha) = (1/n) Σ L_δ(f(K_i alpha) - y_i)  +  (λ/2) alpha^T K alpha
         L_δ(r) = ½ r²          if |r| ≤ δ
-                 δ(|r| − δ/2)  otherwise
+                 δ(|r| - δ/2)  otherwise
 
-    Unlike ITGD, there is NO covariate filtering and NO iterative
-    thresholding — robustness comes entirely from the bounded-influence
-    Huber loss.  This isolates the contribution of filtering + thresholding
-    when compared head-to-head against itgd_kernel.
+    Unlike ITGD- NO covariate filtering and NO iterative
+    thresholding
+      So the only robustness mechanism is huber loss
+
+    Good for compariosn ofthe contribution of filtering + thresholding
+    when compared against itgd_kernel
 
     Parameters
     ----------
     X_train, y_train, Sigma  — as in itgd_kernel
     kernel     : "linear" | "rbf" | "poly"  — or a callable(X1, X2)
     lam        : RKHS regularisation strength
-    delta      : Huber transition point — smaller ⇒ more robust, more biased
+    delta      : Huber transition point — smaller -> more robust, more biased
     eta, T, activation, tol, **kernel_kw  — as in itgd_kernel
 
     Returns
@@ -291,7 +293,7 @@ def huber_krr(X_train, y_train, Sigma, kernel="linear", lam=1e-3,
         grad = K.T @ (hd * fp(Ka)) / n + lam * Ka
 
         gn = float(np.linalg.norm(grad))
-        if gn > 1e6:                                  # gradient clipping
+        if gn > 1e6:    # gradient clipping
             grad *= 1e6 / gn
             gn = 1e6
 
