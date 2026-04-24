@@ -130,37 +130,37 @@ def covariate_filtering(X, epsilon, C=500, max_epochs=100):
 
     for s in range(max_epochs):
         cov = weighted_covariance(X, w)
-        lmbda = np.linalg.norm(cov - np.eye(d), ord=2)
+        lam = np.linalg.norm(cov - np.eye(d), ord=2)
 
         # Breaking Condition
-        if lmbda < C * epsilon:
+        if lam < C * epsilon:
             return w
         
-        alpha = 1 / (1.1 * lmbda)
+        alpha = 1 / (1.1 * lam)
 
         # Gain matrices used for MMW updates
         feedback = []
 
         for t in range(int(np.log(d)) + 2):
             cov_t = weighted_covariance(X, w)
-            lmbda_t = np.linalg.norm(cov_t - np.eye(d), ord=2)
+            lam_t = np.linalg.norm(cov_t - np.eye(d), ord=2)
 
             # Terminate Epoch
-            if lmbda_t <= 0.5 * lmbda:
+            if lam_t <= 0.5 * lam:
                 break
 
             # Perform MMW Update
             U_t = mmw_update(d, feedback, alpha)
 
             # Compute score oracles tau_t and q_t
-            # tau values do not need to be computed unless q_t > lmbda / 5
+            # tau values do not need to be computed unless q_t > lam / 5
             # TODO: implement linear approximate score computations from Algorithm 5 of https://arxiv.org/pdf/1906.11366
 
             # q_t =〈cov_t - eye(d), U_t〉
             # frobenius inner product
             q_t = np.einsum('ij,ij->', cov_t - np.eye(d), U_t)
 
-            if q_t > lmbda / 5:
+            if q_t > lam / 5:
 
                 # For i = 0 ... n, tau_t,i = (x_i - mu_t)^T U_t (x_i - mu_t)
                 mu_t = weighted_mean(X, w)
