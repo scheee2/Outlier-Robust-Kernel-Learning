@@ -5,11 +5,6 @@ Implements:
   - Linear ITGD  (primal space, Algorithm 1 from Rathnashyam & Gittens)
   - Kernel ITGD  (dual space, kernelized extension from Scheer)
   - Huber KRR    (baseline: kernel ridge regression with Huber loss)
-
-ITGD uses covariate filtering (Dong et al. 2019) and per-iteration
-hard-thresholding. Huber KRR drops both and instead gets its robustness
-from the bounded-influence Huber loss — a natural baseline to isolate
-the contribution of filtering + thresholding.
 """
 
 import numpy as np
@@ -40,14 +35,12 @@ _ACTIVATIONS = {
 # ── Huber loss ──────────────────────────────────────────────────────────────
 
 def _huber_value(r, delta=1.0):
-    """Huber loss value  L_δ(r) = ½ r²  if |r|≤δ   else  δ(|r| -δ/2)."""
     abs_r = np.abs(r)
     return np.where(abs_r <= delta,
                     0.5 * r ** 2,
                     delta * (abs_r - 0.5 * delta))
 
 def _huber_deriv(r, delta=1.0):
-    """Derivative of Huber loss:  r  if |r|≤δ   else  δ·sign(r)."""
     return np.where(np.abs(r) <= delta, r, delta * np.sign(r))
 
 def get_activation(name):
@@ -142,9 +135,6 @@ def itgd_kernel(X_train, y_train, Sigma, epsilon, eta=0.01,
     """
     Dual-space (kernel) ITGD with covariate filtering
 
-    Optimises  alpha  in the objective:
-        J(alpha) = (1/n) sum l(f(K_i alpha), y_i)  +  (lam/2) alpha^T K alpha
-
     Parameters
     ----------
     X_train    : (n, d)
@@ -229,11 +219,6 @@ def huber_krr(X_train, y_train, Sigma, kernel="linear", lam=1e-3,
     """
     Kernel Ridge Regression with Huber loss — keeps
     RKHS regularisation but replaces the squared loss with Huber
-
-    Objective:
-        J(alpha) = (1/n) Σ L_δ(f(K_i alpha) - y_i)  +  (λ/2) alpha^T K alpha
-        L_δ(r) = ½ r²          if |r| ≤ δ
-                 δ(|r| - δ/2)  otherwise
 
     Unlike ITGD- NO covariate filtering and NO iterative
     thresholding
@@ -323,7 +308,7 @@ def predict_kernel(X_test, Xw_train, alpha, Sigma,
     """
     Predict with a dual-space (kernel) model.
 
-    Uses the same kernel normalisation that was applied during training.
+    Uses the same kernel normalisation that was applied during training
 
     Parameters
     ----------
