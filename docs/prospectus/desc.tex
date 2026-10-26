@@ -1,0 +1,647 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs,enumitem,microtype,xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage[capitalize,noabbrev]{cleveref}
+
+\definecolor{established}{HTML}{166534}
+\definecolor{proposed}{HTML}{1D4ED8}
+\definecolor{open}{HTML}{9A3412}
+
+\newtheorem{definition}{Definition}[section]
+\newtheorem{proposition}[definition]{Proposition}
+\newtheorem{lemma}[definition]{Lemma}
+\newtheorem{remark}[definition]{Remark}
+\newtheorem{question}[definition]{Research question}
+\newtheorem{milestone}[definition]{Milestone}
+
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\op}{\mathrm{op}}
+\newcommand{\tr}{\mathrm{tr}}
+\newcommand{\cH}{\mathcal{H}}
+\newcommand{\cE}{\mathcal{E}}
+\newcommand{\norm}[1]{\left\lVert #1\right\rVert}
+\newcommand{\ip}[2]{\left\langle #1,#2\right\rangle}
+\newcommand{\status}[2]{\textcolor{#1}{\textbf{#2}}}
+
+\title{Robust Kernel Ridge Regression via Random Fourier Features\\
+\large A Master's-Level Research Project Prospectus}
+\author{}
+\date{September 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This project studies kernel ridge regression when an adversary may replace an
+$\epsilon$ fraction of the training pairs.  The proposed route first replaces a
+shift-invariant kernel by a finite random Fourier feature map and then applies
+robust finite-dimensional estimation.  Random Fourier features are uniformly
+bounded, which removes some tail difficulties, but boundedness alone does
+\emph{not} supply the relative moment conditions used by many sharp robust
+covariance results.  Moreover, estimating a covariance matrix in operator norm
+does not justify whitening directions whose population variance lies below the
+estimation error.  The project therefore asks whether ridge regularization,
+spectral truncation, and a source condition can make the unresolved directions
+irrelevant for prediction.  This prospectus separates established ingredients
+from proposed claims, identifies the main mathematical gap, and gives a staged
+plan suitable for a master's student.
+\end{abstract}
+
+\tableofcontents
+
+\section{Project overview}
+
+Kernel ridge regression (KRR) combines a flexible nonlinear model with a
+convex optimization problem.  Its direct implementation, however, uses an
+$n\times n$ kernel matrix and is vulnerable to a small number of maliciously
+chosen training examples.  Random Fourier features (RFFs) address the first
+issue by turning a shift-invariant kernel into an explicit $m$-dimensional
+feature map.  This project asks whether the same reduction can also help with
+the second issue by converting robust KRR into robust ridge regression.
+
+The intended pipeline is
+\[
+ \text{KRR}\longrightarrow \text{RFF ridge regression}
+ \longrightarrow \text{robust moment estimation}
+ \longrightarrow \text{regularized or truncated solution}.
+\]
+The central obstacle is spectral.  The covariance of the RFF vector can have
+very small eigenvalues.  An additive operator-norm estimate cannot resolve
+these directions, and naively inverting the estimated covariance amplifies the
+error.  Prediction loss, on the other hand, downweights low-variance
+directions.  This suggests that global conditioning may be unnecessary if the
+target has little prediction-relevant mass in the unresolved spectrum.
+
+\paragraph{Primary objective.}
+Prove and test a finite-dimensional result for robust ridge regression on RFF
+features that controls clean-population prediction error without assuming a
+uniform lower bound on the feature covariance.
+
+\paragraph{Secondary objective.}
+Determine when a standard source condition for the kernel integral operator
+implies the finite-dimensional spectral alignment needed by the RFF theorem.
+
+\paragraph{Status convention.}
+Throughout the document,
+\status{established}{Established} denotes a standard fact or a claim proved in
+the text; \status{proposed}{Proposed} denotes a plausible target whose precise
+assumptions and rate remain to be proved; and \status{open}{Open} denotes a
+genuine technical question.
+
+\section{Statistical model and performance criterion}
+
+Let $P$ be a distribution on $\mathcal X\times\R$.  A clean pair $(X,Y)\sim P$
+satisfies
+\begin{equation}\label{eq:model}
+  Y=f_\star(X)+\xi, \qquad \E[\xi\mid X]=0.
+\end{equation}
+The noise assumptions will be specified for each theorem; useful starting
+points are bounded or conditionally sub-Gaussian noise.  Later work may relax
+these to finite conditional moments using robust estimation of the
+feature--response cross-moment.
+
+\begin{definition}[Strong replacement contamination]
+Draw an i.i.d. clean sample $S=((X_i,Y_i))_{i=1}^n\sim P^n$.  After observing
+$S$ and the realized random feature map, an adversary selects a set
+$O\subseteq[n]$ with $|O|\leq \epsilon n$ and replaces every pair indexed by
+$O$ arbitrarily.  The learner observes only the resulting sample
+$\widetilde S$.
+\end{definition}
+
+This is stronger than a model in which only labels are corrupted.  It also
+makes explicit that the RFF randomness is not hidden from the adversary.
+
+The main loss is clean-population prediction error:
+\begin{equation}\label{eq:prediction}
+ \norm{f-f_\star}_{L^2(P_X)}^2
+ =\E_{X\sim P_X}\bigl[(f(X)-f_\star(X))^2\bigr].
+\end{equation}
+Coefficient error is deliberately secondary: it can be large in a direction
+that has negligible variance and hence negligible predictive importance.
+
+\section{Clean kernel ridge regression}
+
+Let $k$ be a bounded positive-semidefinite kernel with reproducing kernel
+Hilbert space (RKHS) $\cH_k$.  Clean population ridge regression solves
+\begin{equation}\label{eq:population-krr}
+ f_\lambda=\arg\min_{f\in\cH_k}
+ \left\{\E(Y-f(X))^2+\lambda\norm{f}_{\cH_k}^2\right\},
+\end{equation}
+while empirical KRR replaces the expectation by the sample average.  By the
+representer theorem, the empirical minimizer has the form
+$\widehat f_\lambda(\cdot)=\sum_{i=1}^n\alpha_i k(X_i,\cdot)$, where, under the
+normalization in \cref{eq:population-krr},
+\[
+  \bm\alpha=(K+n\lambda I_n)^{-1}\bm y.
+\]
+
+The population kernel integral operator $T:L^2(P_X)\to L^2(P_X)$ is
+\begin{equation}\label{eq:T}
+  (Tg)(x)=\int k(x,x')g(x')\,dP_X(x').
+\end{equation}
+Two standard quantities governing clean KRR are the effective dimension
+\begin{equation}\label{eq:effective-dim}
+  \mathcal N(\lambda)=\tr\bigl(T(T+\lambda I)^{-1}\bigr)
+\end{equation}
+and a source condition such as
+\begin{equation}\label{eq:kernel-source}
+  f_\star=T^r g,\qquad \norm{g}_{L^2(P_X)}\leq R.
+\end{equation}
+The exact admissible range and interpretation of $r$ depend on the convention
+and ambient space.  The student should not import a rate from the literature
+without first matching these definitions.  Caponnetto and De Vito
+\cite{caponnetto2007} and the correction by Sutherland \cite{sutherland2017}
+are useful references for this operator viewpoint.
+
+\section{Random Fourier features}
+
+Suppose $\mathcal X\subseteq\R^d$ and $k(x,x')=\kappa(x-x')$ is continuous,
+shift invariant, and normalized so that $k(x,x)=1$.  Bochner's theorem implies
+that $\kappa$ is the Fourier transform of a probability measure $\rho$:
+\[
+ \kappa(t)=\int_{\R^d} e^{i\omega^\top t}\,d\rho(\omega).
+\]
+For the Gaussian kernel
+\[
+ k_\sigma(x,x')=\exp\!\left(-\frac{\norm{x-x'}_2^2}{2\sigma^2}\right),
+\]
+$\rho$ is Gaussian with covariance $\sigma^{-2}I_d$.  Draw
+$\omega_1,\ldots,\omega_m\stackrel{\mathrm{iid}}\sim\rho$ and
+$b_1,\ldots,b_m\stackrel{\mathrm{iid}}\sim\operatorname{Unif}[0,2\pi]$, and
+define
+\begin{equation}\label{eq:rff}
+ \Phi(x)=\sqrt{\frac{2}{m}}
+ \bigl(\cos(\omega_1^\top x+b_1),\ldots,
+       \cos(\omega_m^\top x+b_m)\bigr)^\top.
+\end{equation}
+Then $\E_{\omega,b}\ip{\Phi(x)}{\Phi(x')}=k(x,x')$; see Rahimi and Recht
+\cite{rahimi2007}.  Ridge regression in this feature space is
+\begin{equation}\label{eq:rff-ridge}
+ \widehat\beta_\lambda=\arg\min_{\beta\in\R^m}
+ \left\{\frac1n\sum_{i=1}^n(Y_i-\beta^\top\Phi(X_i))^2
+ +\lambda\norm{\beta}_2^2\right\},
+ \qquad \widehat f(x)=\widehat\beta_\lambda^\top\Phi(x).
+\end{equation}
+
+\subsection{What bounded features do and do not imply}
+
+Let $Z=\Phi(X)$.  The chosen normalization gives, deterministically,
+\begin{equation}\label{eq:bounded}
+ \norm{Z}_2^2=\frac{2}{m}\sum_{j=1}^m
+ \cos^2(\omega_j^\top X+b_j)\leq 2.
+\end{equation}
+Consequently $|v^\top Z|\leq\sqrt2\norm v_2$ and
+$\E|v^\top Z|^4\leq4\norm v_2^4$ for every $v$.
+
+This is useful absolute control, but the following distinction is essential.
+Sharp covariance results under weak moments often assume a \emph{relative}
+marginal moment condition
+\begin{equation}\label{eq:l4l2}
+ \bigl(\E|v^\top(Z-\E Z)|^4\bigr)^{1/4}
+ \leq L\bigl(\E|v^\top(Z-\E Z)|^2\bigr)^{1/2}
+ \quad\text{for all }v.
+\end{equation}
+Equation \eqref{eq:bounded} does not imply \eqref{eq:l4l2} with a uniform $L$:
+the variance in the denominator may be arbitrarily small.  Thus the statement
+``RFFs are bounded, therefore a relative operator-norm covariance theorem
+applies'' is not valid without an additional argument or assumption.
+
+\begin{remark}[Centering and second moments]
+For regression, the normal matrix is usually the second moment
+$M=\E[ZZ^\top]$, not the centered covariance
+$\Sigma=\E[(Z-\E Z)(Z-\E Z)^\top]$.  They agree only when $\E Z=0$.
+One may include an unpenalized intercept and center the features robustly, or
+work directly with $M$.  This prospectus uses $M$ unless centering is explicit.
+\end{remark}
+
+\section{The finite-dimensional ridge problem}
+
+Condition on the realized feature map and define
+\begin{equation}\label{eq:moments}
+ M=\E[ZZ^\top],\qquad c=\E[ZY],\qquad
+ \beta_\lambda=(M+\lambda I)^{-1}c.
+\end{equation}
+The corresponding population RFF predictor is
+$f_{m,\lambda}(x)=\beta_\lambda^\top\Phi(x)$.  If robust estimators
+$\widehat M$ and $\widehat c$ are available, the plug-in estimator is
+\begin{equation}\label{eq:plugin}
+ \widetilde\beta_\lambda=(\widehat M+\lambda I)^{-1}\widehat c.
+\end{equation}
+
+The ridge shift already prevents literal inversion of tiny eigenvalues.
+Nevertheless, the basic resolvent identity shows where a potentially harmful
+$1/\lambda$ factor enters:
+\begin{align}
+ \widetilde\beta_\lambda-\beta_\lambda
+ ={}&(\widehat M+\lambda I)^{-1}(\widehat c-c)\nonumber\\
+ &+(\widehat M+\lambda I)^{-1}(M-\widehat M)\beta_\lambda.
+ \label{eq:resolvent}
+\end{align}
+An absolute bound $\norm{\widehat M-M}_\op\leq\delta$ combined only with
+$\norm{(\widehat M+\lambda I)^{-1}}_\op\leq1/\lambda$ yields a term of order
+$\delta/\lambda$.  The project aims to replace this worst-case Euclidean
+argument by one adapted to the prediction geometry.
+
+For any coefficient error $h$,
+\begin{equation}\label{eq:pred-norm}
+ \norm{h^\top\Phi(\cdot)}_{L^2(P_X)}^2=h^\top M h
+ =\norm{M^{1/2}h}_2^2.
+\end{equation}
+Thus the natural perturbation object is not merely
+$\norm{\widehat M-M}_\op$, but the ridge-relative error
+\begin{equation}\label{eq:relative}
+ \Delta_\lambda=
+ \norm{(M+\lambda I)^{-1/2}(\widehat M-M)
+       (M+\lambda I)^{-1/2}}_\op.
+\end{equation}
+When $\Delta_\lambda<1$, standard matrix perturbation arguments compare the
+true and estimated ridge geometries without requiring $M$ to be invertible.
+Obtaining such a guarantee robustly is one of the main technical tasks.
+
+\section{Spectral resolution and source alignment}
+
+Let $M=\sum_{j=1}^m\mu_j u_ju_j^\top$, with $\mu_j\geq0$.  Suppose only that
+$\norm{\widehat M-M}_\op\leq\delta$.  Eigenvalues far below $\delta$ and
+eigenspaces separated by gaps comparable to $\delta$ cannot be expected to be
+accurately recovered.  Full whitening by $\widehat M^{-1/2}$ is therefore
+unstable.  Ridge regularization or thresholding at a level
+$\tau\gtrsim\delta$ is the appropriate default.
+
+Consider the finite-dimensional source condition
+\begin{equation}\label{eq:finite-source}
+  \beta=M^r v,\qquad \norm v_2\leq R,\qquad r\geq0.
+\end{equation}
+This says that the target coefficient decreases along low-variance
+eigendirections.  Let $P_{<\tau}=\sum_{\mu_j<\tau}u_ju_j^\top$.
+
+\begin{proposition}[Prediction cost of discarding the bottom spectrum]
+Under \eqref{eq:finite-source},
+\begin{equation}\label{eq:trunc-bound}
+ \norm{M^{1/2}P_{<\tau}\beta}_2
+ \leq R\tau^{r+1/2}.
+\end{equation}
+\end{proposition}
+\begin{proof}
+Write $v=\sum_jv_ju_j$.  Then
+\[
+ \norm{M^{1/2}P_{<\tau}\beta}_2^2
+ =\sum_{\mu_j<\tau}\mu_j^{2r+1}v_j^2
+ \leq\tau^{2r+1}\norm v_2^2.
+\]
+Taking square roots proves the claim.
+\end{proof}
+
+This elementary inequality is the main motivation for the project, but it is
+not yet a robust regression theorem.  Such a theorem must also control the
+estimated top spectral subspace, the cross-moment $c$, sampling error, and the
+interaction between $\lambda$ and $\tau$.
+
+\section{Robust estimation ingredients}
+
+\subsection{Estimating the feature second moment}
+
+The matrices $Z_iZ_i^\top$ satisfy
+$\norm{Z_iZ_i^\top}_\op\leq2$ for clean observations.  This boundedness gives
+standard concentration for the clean empirical second moment.  Under strong
+contamination, however, the corrupted feature vectors need not be bounded: the
+adversary replaces the observed pairs and is not required to provide points
+that are consistent with $\Phi(x)$.  A robust procedure must therefore reject,
+filter, truncate, or reweight arbitrary submitted vectors.
+
+Results such as Abdalla and Zhivotovskiy \cite{abdalla2022} and Oliveira and
+Rico \cite{oliveira2022} provide strong operator-norm guarantees under
+adversarial contamination and $L_p$--$L_2$ marginal equivalence.  Minsker and
+Wang \cite{minsker2022} study adversarial contamination and heavy tails with
+adaptation to low-rank structure.  Their assumptions and conclusions should be
+checked carefully against \eqref{eq:l4l2}; none should be invoked solely from
+the absolute boundedness in \eqref{eq:bounded}.
+
+Three defensible routes are available:
+\begin{enumerate}[label=(\alph*)]
+ \item assume a relative $L_4$--$L_2$ condition for the RFF distribution and
+       apply an existing robust covariance theorem;
+ \item exploit the special trigonometric structure of RFFs to prove an
+       appropriate ridge-relative estimate directly;
+ \item settle initially for an absolute operator-norm bound, then combine it
+       with thresholding and \cref{eq:trunc-bound}.
+\end{enumerate}
+Route (c) is the most suitable first master's-level target.
+
+\subsection{Estimating the cross-moment}
+
+Covariance estimation alone is insufficient.  The normal equations also use
+$c=\E[ZY]$.  Although $Z$ is bounded, $ZY$ inherits the tails of $Y$.  Under
+bounded $Y$ it is a bounded-vector robust mean problem.  Under sub-Gaussian or
+finite-moment noise it requires an estimator and theorem matched to those
+assumptions.  An alternative is to use a robust regression method directly
+rather than separately estimating $M$ and $c$; robust linear regression results
+for Gaussian covariates illustrate what is possible in a more structured
+setting \cite{diakonikolas2023}.
+
+\section{A precise target theorem template}
+
+The following is deliberately a template, not a claim.
+
+\begin{question}[Finite-dimensional robust RFF ridge theorem]\label{q:main}
+Under explicit assumptions on the conditional noise and the clean distribution
+of $Z=\Phi(X)$, construct a polynomial-time estimator $\widetilde\beta$ such
+that, with probability at least $1-\eta$,
+\begin{equation}\label{eq:target-template}
+ \norm{M^{1/2}(\widetilde\beta-\beta_\star)}_2
+ \leq
+ \cE_{\mathrm{sample}}(n,m,\eta)
+ +\cE_{\mathrm{contam}}(\epsilon)
+ +\cE_{\mathrm{ridge}}(\lambda)
+ +R\tau^{r+1/2},
+\end{equation}
+where $\tau$ is a justified robust spectral-resolution scale and no positive
+lower bound on $\lambda_{\min}(M)$ is assumed.
+\end{question}
+
+The theorem must state whether $\beta_\star$ is an unregularized population
+coefficient, the best linear predictor in the RFF class, or the ridge target
+$\beta_\lambda$.  These are different objects.  A clean first result should
+compare with $\beta_\lambda$; approximation to $f_\star$ can then be handled in
+a separate step.
+
+\subsection{A candidate truncated estimator}
+
+A concrete starting algorithm is:
+\begin{enumerate}
+ \item Compute robust estimates $\widehat M$ of $M$ and $\widehat c$ of $c$.
+ \item Diagonalize $\widehat M=\sum_j\widehat\mu_j
+       \widehat u_j\widehat u_j^\top$ and form
+       $\widehat P_\tau=\sum_{\widehat\mu_j\geq\tau}
+       \widehat u_j\widehat u_j^\top$.
+ \item Return
+ \begin{equation}\label{eq:truncated-estimator}
+  \widetilde\beta_{\lambda,\tau}
+  =\widehat P_\tau
+  (\widehat P_\tau\widehat M\widehat P_\tau+\lambda\widehat P_\tau)^{\dagger}
+  \widehat P_\tau\widehat c.
+ \end{equation}
+\end{enumerate}
+Here $\dagger$ denotes the Moore--Penrose pseudoinverse on the retained
+subspace.  The analysis should avoid requiring individual eigenvectors to be
+identified when eigenvalues are clustered.  Projector or functional-calculus
+arguments are preferable.
+
+\section{From the finite-dimensional result back to KRR}
+
+Let $\widehat f_{\mathrm{rob}}$ be the robust RFF estimator,
+$f_{m,\lambda}$ the population or clean empirical RFF ridge comparator (the
+choice must be fixed), and $f_\lambda$ the corresponding exact-kernel ridge
+comparator.  Then
+\begin{align}
+ \norm{\widehat f_{\mathrm{rob}}-f_\star}_{L^2(P_X)}
+ \leq{}&
+ \underbrace{\norm{\widehat f_{\mathrm{rob}}-f_{m,\lambda}}_{L^2(P_X)}}_
+ {\text{robust finite-dimensional estimation}}\nonumber\\
+ &+\underbrace{\norm{f_{m,\lambda}-f_\lambda}_{L^2(P_X)}}_
+ {\text{random-feature approximation}}\nonumber\\
+ &+\underbrace{\norm{f_\lambda-f_\star}_{L^2(P_X)}}_
+ {\text{clean ridge bias / statistical error}}.
+ \label{eq:decomp}
+\end{align}
+This inequality is elementary, but each comparator must be defined on the same
+population/sample probability space.  Mixing a population RFF solution with a
+finite-sample exact KRR solution obscures which randomness each term contains.
+
+Rahimi and Recht \cite{rahimi2007} establish the RFF construction.  Rudi and
+Rosasco \cite{rudi2017} show that random-feature ridge regression can attain
+optimal learning behavior with substantially fewer features than samples in
+standard regimes.  Avron et al.\ \cite{avron2017} study spectral approximation
+for KRR and explain the role of leverage-based feature sampling.  These works
+provide tools for the middle term of \eqref{eq:decomp}, but the student must
+match their regularization conventions and hypotheses to the robust theorem.
+
+\section{The kernel-to-RFF source-condition question}
+
+The finite-dimensional assumption $\beta=M^rv$ is mathematically convenient
+but model-dependent: both $M$ and the coefficient vector depend on the realized
+features.  The conceptually cleaner assumption is the kernel-level condition
+$f_\star=T^rg$ in \eqref{eq:kernel-source}.
+
+\begin{question}[Transfer of source regularity]
+For which feature-sampling schemes, feature counts $m$, and regularization
+levels $\lambda$ does the kernel source condition imply either
+\begin{enumerate}[label=(\roman*)]
+ \item a finite-dimensional source representation with controlled radius, or
+ \item directly a small prediction contribution from the empirically
+       unresolved RFF spectrum?
+\end{enumerate}
+\end{question}
+
+Exact transfer may be too strong because the RFF subspace is random.  A more
+realistic goal is an approximate statement with a residual term already
+controlled by the RFF approximation error.  This question should be attempted
+only after the finite-dimensional analysis is complete.
+
+\section{Recommended project stages}
+
+\begin{milestone}[Definitions and sanity checks; weeks 1--2]
+Fix all target objects, distinguish covariance from second moment, derive the
+normal equations and \eqref{eq:resolvent}, and reproduce
+\cref{eq:trunc-bound}.  Construct a two-dimensional example showing why an
+additive covariance estimate cannot safely whiten a tiny eigenvalue.
+\end{milestone}
+
+\begin{milestone}[Clean RFF baseline; weeks 3--4]
+Implement exact KRR and RFF ridge regression for synthetic data.  Empirically
+study how prediction error changes with $m$ and $\lambda$.  Read
+\cite{rahimi2007,rudi2017,avron2017} and state one applicable approximation
+result using the project's notation.
+\end{milestone}
+
+\begin{milestone}[Robust finite-dimensional baseline; weeks 5--7]
+Begin with bounded responses and implement a robust mean estimator for $c$ and
+a robust estimator for $M$.  Compare a plug-in ridge estimator, full whitening,
+and spectral truncation under pair contamination.
+\end{milestone}
+
+\begin{milestone}[Perturbation theorem; weeks 8--10]
+Prove a deterministic theorem: conditional on bounds for $\widehat M-M$ and
+$\widehat c-c$, control prediction error of \eqref{eq:truncated-estimator} under
+\eqref{eq:finite-source}.  Keep the stochastic robust-estimation result as a
+separate corollary.
+\end{milestone}
+
+\begin{milestone}[Integration or counterexample; weeks 11--12]
+Combine the deterministic result with one carefully verified robust estimation
+theorem.  If the desired rate cannot follow from the available assumptions,
+give a counterexample identifying the missing condition.  Either outcome is a
+successful research contribution.
+\end{milestone}
+
+\begin{milestone}[Optional extension; weeks 13--14]
+Investigate transfer from \eqref{eq:kernel-source}, leverage-weighted features,
+or noise weaker than boundedness.  This is a stretch goal, not a prerequisite
+for completing the project.
+\end{milestone}
+
+\section{Experiments}
+
+Experiments should diagnose theory rather than merely compare test accuracy.
+A useful synthetic design chooses a prescribed diagonal feature covariance,
+places the target coefficient at controlled spectral locations, and corrupts
+an $\epsilon$ fraction of complete pairs.  Record:
+\begin{itemize}
+ \item clean prediction error versus $\epsilon$, $m$, $n$, $\lambda$, and
+       truncation threshold $\tau$;
+ \item operator error $\norm{\widehat M-M}_\op$ and ridge-relative error
+       $\Delta_\lambda$;
+ \item the target energy $\sum_{\mu_j<\tau}\mu_j\beta_j^2$ below the threshold;
+ \item sensitivity to an adversary concentrated in a low-variance direction;
+ \item comparison with nonrobust RFF ridge, oracle clean RFF ridge, and exact
+       clean KRR.
+\end{itemize}
+The oracle comparators are essential: they distinguish kernel approximation,
+ordinary sampling error, and contamination error.
+
+\section{Common pitfalls}
+
+\begin{enumerate}
+ \item \textbf{Bounded is not relatively hypercontractive.}  Do not infer
+       \eqref{eq:l4l2} from \eqref{eq:bounded}.
+ \item \textbf{Covariance is not the regression normal matrix.}  Account for
+       the feature mean or use $M=\E[ZZ^\top]$ directly.
+ \item \textbf{The response moment must be estimated.}  A robust covariance
+       estimate does not by itself produce a regression estimator.
+ \item \textbf{Ridge and truncation have different biases.}  Track both
+       $\lambda$ and $\tau$ rather than merging them informally.
+ \item \textbf{Eigenspaces need gaps; spectral functions often do not.}  Avoid
+       claims about recovering individual eigenvectors unless a gap assumption
+       is stated.
+ \item \textbf{A displayed desired rate is not a theorem.}  Every final result
+       must identify its estimator, probability, sample-size conditions,
+       constants or parameter dependence, and computational status.
+ \item \textbf{Condition on feature randomness consistently.}  Say whether a
+       statement holds for most feature draws, for a fixed draw, or jointly
+       over feature and sample randomness.
+\end{enumerate}
+
+\section{Concrete deliverables}
+
+At the end of the project, the student should produce:
+\begin{enumerate}
+ \item a precise problem statement and literature review;
+ \item a deterministic perturbation theorem for regularized or truncated
+       moment-based regression;
+ \item either a stochastic corollary under a verified robust-estimation result
+       or a counterexample showing why stronger assumptions are necessary;
+ \item reproducible synthetic experiments with oracle baselines;
+ \item a clear account of what remains open, especially the transfer from a
+       kernel source condition to finite random features.
+\end{enumerate}
+
+\section{Questions to settle with the advisor}
+
+The following choices materially affect the theorem and should be fixed before
+the student begins the main proof.
+\begin{enumerate}
+ \item Is the first theorem allowed to assume bounded responses, or should it
+       begin immediately with conditionally sub-Gaussian noise?
+ \item Should the primary comparator be the population RFF ridge solution
+       $\beta_\lambda$ or the clean empirical RFF estimator?
+ \item Is polynomial-time computation required, or is an information-theoretic
+       estimator acceptable for the first result?
+ \item Should complete-pair replacement remain the main model, or should the
+       project first solve the simpler label-only contamination problem?
+ \item Is the kernel-level source-condition transfer a required deliverable or
+       explicitly a stretch goal?
+\end{enumerate}
+
+\section{Reading guide}
+
+The following order is reasonable for a master's student.
+\begin{enumerate}
+ \item Read Rahimi and Recht \cite{rahimi2007} for Bochner's theorem and the
+       basic RFF construction.
+ \item Read selected sections of Rudi and Rosasco \cite{rudi2017} for learning
+       with random features, then Avron et al.\ \cite{avron2017} for the
+       regularized spectral-approximation viewpoint.
+ \item Review KRR source conditions and effective dimension in Caponnetto and
+       De Vito \cite{caponnetto2007}, together with Sutherland's correction
+       \cite{sutherland2017}.
+ \item Read a robust statistics overview such as Diakonikolas and Kane
+       \cite{diakonikolas2019} to learn the strong contamination model and
+       filtering paradigm.
+ \item Only then study robust covariance papers
+       \cite{abdalla2022,oliveira2022,minsker2022}, writing down precisely which
+       moment assumption each theorem uses.
+\end{enumerate}
+
+\begin{thebibliography}{99}
+
+\bibitem{abdalla2022}
+P. Abdalla and N. Zhivotovskiy.
+\newblock Covariance estimation: optimal dimension-free guarantees for
+adversarial corruption and heavy tails.
+\newblock \emph{arXiv:2205.08494}, 2022.
+\newblock \url{https://arxiv.org/abs/2205.08494}.
+
+\bibitem{avron2017}
+H. Avron, M. Kapralov, C. Musco, C. Musco, A. Velingker, and A. Zandieh.
+\newblock Random Fourier features for kernel ridge regression: approximation
+bounds and statistical guarantees.
+\newblock In \emph{Proceedings of the 34th International Conference on Machine
+Learning}, 2017.  Extended version: \url{https://arxiv.org/abs/1804.09893}.
+
+\bibitem{caponnetto2007}
+A. Caponnetto and E. De Vito.
+\newblock Optimal rates for the regularized least-squares algorithm.
+\newblock \emph{Foundations of Computational Mathematics}, 7:331--368, 2007.
+
+\bibitem{diakonikolas2019}
+I. Diakonikolas and D. M. Kane.
+\newblock Recent advances in algorithmic high-dimensional robust statistics.
+\newblock \emph{arXiv:1911.05911}, 2019.
+\newblock \url{https://arxiv.org/abs/1911.05911}.
+
+\bibitem{diakonikolas2023}
+I. Diakonikolas, D. M. Kane, A. Pensia, and T. Pittas.
+\newblock Near-optimal algorithms for Gaussians with Huber contamination: mean
+estimation and linear regression.
+\newblock \emph{arXiv:2312.01547}, 2023.
+\newblock \url{https://arxiv.org/abs/2312.01547}.
+
+\bibitem{minsker2022}
+S. Minsker and L. Wang.
+\newblock Robust estimation of covariance matrices: adversarial contamination
+and beyond.
+\newblock \emph{arXiv:2203.02880}, 2022.
+\newblock \url{https://arxiv.org/abs/2203.02880}.
+
+\bibitem{oliveira2022}
+R. I. Oliveira and Z. F. Rico.
+\newblock Improved covariance estimation: optimal robustness and sub-Gaussian
+guarantees under heavy tails.
+\newblock \emph{arXiv:2209.13485}, 2022.
+\newblock \url{https://arxiv.org/abs/2209.13485}.
+
+\bibitem{rahimi2007}
+A. Rahimi and B. Recht.
+\newblock Random features for large-scale kernel machines.
+\newblock In \emph{Advances in Neural Information Processing Systems 20}, 2007.
+\newblock \url{https://people.eecs.berkeley.edu/~brecht/papers/07.rah.rec.nips.pdf}.
+
+\bibitem{rudi2017}
+A. Rudi and L. Rosasco.
+\newblock Generalization properties of learning with random features.
+\newblock In \emph{Advances in Neural Information Processing Systems 30}, 2017.
+\newblock \url{https://papers.nips.cc/paper/2017/hash/61b1fb3f59e28c67f3925f3c79be81a1-Abstract.html}.
+
+\bibitem{sutherland2017}
+D. J. Sutherland.
+\newblock Fixing an error in Caponnetto and De Vito (2007).
+\newblock \emph{arXiv:1702.02982}, 2017.
+\newblock \url{https://arxiv.org/abs/1702.02982}.
+
+\end{thebibliography}
+
+\end{document}

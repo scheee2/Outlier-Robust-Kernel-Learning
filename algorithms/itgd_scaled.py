@@ -9,7 +9,7 @@ Implements:
 
 import numpy as np
 import scipy.linalg as la
-from covariate_filtering import covariate_filtering
+from algorithms.covariate_filtering import covariate_filtering
 
 
 # ── Activations ──────────────────────────────────────────────────────────────

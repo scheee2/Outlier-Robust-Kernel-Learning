@@ -14,7 +14,7 @@ the contribution of filtering + thresholding.
 
 import numpy as np
 import scipy.linalg as la
-from covariate_filtering import covariate_filtering
+from algorithms.covariate_filtering import covariate_filtering
 
 
 # ── Activations ──────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ def itgd_linear(X_train, y_train, Sigma, epsilon, eta=0.1, T=500,
     # Whiten covariates and run covariate filtering
     W = la.fractional_matrix_power(Sigma, -0.5).real
     Xw = X_train @ W
-    omega = np.asarray(covariate_filtering(Xw, epsilon)).ravel() * n  # scale to ~1
+    omega = covariate_filtering(Xw, epsilon)
 
     w = np.zeros(d)
     k = int(np.ceil(n * (1 - epsilon)))

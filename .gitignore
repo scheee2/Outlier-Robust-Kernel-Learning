@@ -29,3 +29,16 @@ ENV/
 
 .DS_Store
 **/.DS_Store
+# Jupyter
+.ipynb_checkpoints/
+
+# LaTeX build artifacts
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+CLAUDE.md
